@@ -1,42 +1,162 @@
-import pygame
-from settings import *
+# import library
+import datetime
+from setting import *
 from widget import Widget
-from textviews import Textviews
-from buttons import Buttons
-
-class CalendarManager:
-    def __init__(self):
-        self.x= 20
-        self.y= 20 
-        self.w= WINDOW_WIDTH - self.x*2
-        self.h= WINDOW_HEIGHT - self.y*2
-    
-
-        self.month = Textviews(self, [20,20], "August 2023", sizeText = 20, background=SILVER)
-        self.mode = Widget(self, [0,20], [60,20], align = 1)
-        weekButton = Buttons(self.mode, [0,0], [self.mode.w //2, self.mode.h], background=SILVER)
-        monthButton = Buttons (self.mode, [self.mode.w //2, 0], [self.mode.w //2, self.mode.h])
-        self.mode.buttons.append(weekButton)
-        self.mode.buttons.append(monthButton)
-
-        #self.tools = Widget()
-        #self.days = Widget()
+from textview import Textview
+from button import Button
+from calendarTable import CalendarTable
+from dayNote import DayNote
 
 
+class CalendarManager(Widget):
+    def __init__(self, parent , pos = [0, 0], size = [0, 0], align = [Align.NONE, Align.NONE], background = WHITE, boderRadius = 0):
+        super().__init__(parent=parent, pos=pos, size=size, align=align, background=background, boderRadius=boderRadius)
+        # declare views
 
-    def draw(self, surface):
-        #DRAW BACKGROUND
-        pygame.draw.rect(surface,SILVER,(self.x,self.y,self.w,self.h),border_radius=10)
-        #DRAW MONTH'S BUTTON
-        self.month.draw(surface)
+        # 1/ month and year
+        self.now = datetime.date.today()
+        text = self.now.strftime("%B %Y")
+        self.month = Textview(parent=self, name="monthView", pos=[20, 20], wrap=False, text=text, align=[Align.NONE, Align.NONE])
+        self.views.append(self.month)
 
-        #DRAW MODE
-        self.mode.draw(surface)
+        # 2/ tools: month and day
+        self.tools = Widget(parent=self, name="toolsView", pos=[20,20], size=[80, self.month.h], align=[Align.CENTER, Align.NONE])
+        # day button
+        self.dayButtonDiv = Widget(parent=self.tools, name="dayButton", pos=[0,0], size=[self.tools.w // 2, self.tools.h])
+        self.dayButton = Button(parent=self.dayButtonDiv, text="day", wrap=False)
+        self.dayButtonDiv.views.append(self.dayButton)
+        self.tools.views.append(self.dayButtonDiv)
 
-    def mouseListener(self):
-        pass
+        # month button
+        self.monthButtonDiv = Widget(parent=self.tools, name="monthButton", pos=[self.tools.w // 2, 0], size=[self.tools.w // 2, self.tools.h], hover=WHITE, background=WHITE)
+        self.monthButton = Button(parent=self.monthButtonDiv, text="month", wrap=False)
+        self.monthButtonDiv.views.append(self.monthButton)
+        self.tools.views.append(self.monthButtonDiv)
 
-    def keyboardListener(self):
-        pass
+        self.views.append(self.tools)
 
-    
+        # 3/ today tools
+        self.todayTools = Widget(parent=self, pos=[640, self.month.y], size=[100, self.tools.h])
+        # prev Button
+
+        self.prevButtonDiv = Widget(parent=self.todayTools, pos=[0,0], size=[20, self.todayTools.h], hover=WHITE)
+        self.prevButton = Button(parent=self.prevButtonDiv, wrap=False, text="<")
+        self.prevButtonDiv.views.append(self.prevButton)
+        self.todayTools.views.append(self.prevButtonDiv)
+
+        # today Button
+        self.todayButtonDiv = Widget(parent=self.todayTools, pos=[20, 0], size=[40, self.todayTools.h], hover=WHITE, align=[Align.CENTER, Align.NONE])
+        self.todayButton = Button(parent=self.todayButtonDiv, text="Today", wrap=False)
+        self.todayButtonDiv.views.append(self.todayButton)
+        self.todayTools.views.append(self.todayButtonDiv)
+
+        # next Button
+        self.nextButtonDiv = Widget(parent=self.todayTools, pos=[80, 0], size=[self.prevButtonDiv.w, self.todayTools.h], hover=WHITE)
+        self.nextButton = Button(parent=self.nextButtonDiv, text=">", wrap=False)
+        self.nextButtonDiv.views.append(self.nextButton)
+        self.todayTools.views.append(self.nextButtonDiv)
+
+        self.views.append(self.todayTools)
+
+        # 4/ frame of calendar
+        self.calendar = CalendarTable(parent=self)
+        self.views.append(self.calendar)
+
+
+        # 5/ date bar
+        self.dateBar = Widget(parent=self, name="dateBar", pos=[self.calendar.x, 55], size=[self.calendar.w, 20], align=[Align.CENTER, Align.NONE])
+        dates = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+        for i in range(len(dates)):
+            dayDiv = Widget(parent=self.dateBar, pos=[self.calendar.dayWidth * i, 0])
+            dayText = Textview(parent=dayDiv, wrap=True, text=dates[i])
+            dayDiv.views.append(dayText)
+            self.dateBar.views.append(dayDiv)
+
+        self.views.append(self.dateBar)
+
+
+        # 6/ day note
+        self.dayNote = DayNote(parent=self)
+        self.views.append(self.dayNote)
+
+
+
+    def draw(self, surface, userContact=User.NONE, infor="none"):
+        self.update(userContact=userContact, infor=infor)
+        super().draw(surface)
+
+    def update(self, userContact=User.NONE, infor="none"):
+        match userContact:
+            case User.MOUSE:
+                self.mouseListener(infor)
+            case User.KEYBOARD:
+                self.keyboardListener(infor)
+        super().update()
+
+    def mouseListener(self, infor):
+        pos = infor
+
+        # click on month Button
+        if checkin(pos, self.monthButtonDiv):
+            self.monthButtonDiv.background = WHITE
+            self.dayButtonDiv.background = SILVER
+            self.calendar.display = Display.SHOW
+            self.dayNote.display = Display.HIDE
+            self.todayTools.display = Display.SHOW
+            self.dateBar.display = Display.SHOW
+            self.month.text = self.calendar.dateDisplay.strftime('%B %Y')
+
+        # click on next Button
+        elif checkin(pos, self.nextButtonDiv):
+            self.calendar.nextMonth()
+            self.month.text = self.calendar.inforDay
+
+        # click on prev Button
+        elif checkin(pos, self.prevButtonDiv):
+            self.calendar.prevMonth()
+            self.month.text = self.calendar.inforDay
+
+        # click on today Button
+        elif checkin(pos, self.todayButtonDiv):
+            self.calendar.nowMonth()
+            self.month.text = self.calendar.inforDay
+
+        # choose day of month
+        elif checkin(pos, self.calendar) and self.calendar.display == Display.SHOW:
+            if not self.calendar.mouseListener(pos): return
+            self.dayButtonDiv.background = WHITE
+            self.monthButtonDiv.background = SILVER
+            self.calendar.display = Display.HIDE
+            self.dayNote.display = Display.SHOW
+            self.todayTools.display = Display.HIDE
+            self.dateBar.display = Display.HIDE
+            self.month.text = self.calendar.dateDisplay.strftime("%B %d, %Y")
+            self.dayNote.hide()
+            self.dayNote.show()
+
+
+        #CLICK ON ADDNOTE BUTTON
+
+        elif checkin(pos, self.dayNote.addButtonDiv) and self.dayNote.display == Display.SHOW:
+            self.dayNote.typing = True
+            self.dayNote.note[self.dayNote.noteCurrent].text = "_"
+
+        #CLICK ON DELETE BUTTON
+
+        elif checkin(pos,self.dayNote.deleteButtonDiv) and self.dayNote.display == Display.SHOW:
+            database = open("data.txt", "r")
+            datas = database.read().split('|||')
+            database.close()
+            database = open ("data.txt", 'w')
+            for data in datas:
+                if data == "": break
+                content = data.split('///')
+                print(content)
+                if content [0] != self.month.text:
+                    database.write(content[0]+"///"+content[1]+ "|||")
+            self.dayNote.hide()
+            self.dayNote.show()
+
+
+    def keyboardListener(self, infor):
+        self.dayNote.keyboardListener(infor)
